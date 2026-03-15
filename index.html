@@ -2,55 +2,69 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>JSON Formatter</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Line Formatter</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-        textarea { width: 100%; height: 150px; margin-bottom: 10px; }
-        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }
-        button { padding: 10px 20px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        :root { --primary-color: #4a90e2; --bg-color: #f8f9fa; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); padding: 40px; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        h2 { margin-top: 0; color: #2c3e50; border-left: 5px solid var(--primary-color); padding-left: 15px; }
+        textarea { width: 100%; height: 250px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; font-family: 'Courier New', Courier, monospace; font-size: 14px; box-sizing: border-box; resize: vertical; }
+        .controls { margin: 20px 0; text-align: center; }
+        button { background-color: var(--primary-color); color: white; border: none; padding: 12px 30px; font-size: 16px; border-radius: 6px; cursor: pointer; transition: background 0.3s; }
+        button:hover { background-color: #357abd; }
+        .output-label { font-weight: bold; margin-bottom: 10px; display: block; }
+        #output { background: #282c34; color: #abb2bf; padding: 20px; border-radius: 8px; overflow-x: auto; font-family: 'Courier New', Courier, monospace; font-size: 14px; white-space: pre; min-height: 50px; }
+        .error { color: #e74c3c; background: #fdf2f2; border: 1px solid #e74c3c; padding: 10px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
-    <h2>JSON 特定キー改行フォーマッター</h2>
-    <p>JSONオブジェクトを入力してください：</p>
-    <textarea id="jsonInput">{
-}</textarea>
+<div class="container">
+    <h2>JSON キー別1行変換</h2>
+    <p>JSONを貼り付けて「変換」を押すと、各キーごとに改行しつつ中身を1行にまとめます。</p>
+    
+    <textarea id="jsonInput" placeholder='ここにJSONを貼り付けてください...'></textarea>
 
-    <button onclick="formatJson()">整形実行</button>
+    <div class="controls">
+        <button onclick="transformJson()">変換を実行する</button>
+    </div>
 
-    <h3>出力結果:</h3>
-    <pre id="output"></pre>
+    <span class="output-label">出力結果:</span>
+    <pre id="output">変換後のJSONがここに表示されます</pre>
+</div>
 
-    <script>
-        function formatJson() {
-            const input = document.getElementById('jsonInput').value;
-            const outputElement = document.getElementById('output');
+<script>
+    function transformJson() {
+        const input = document.getElementById('jsonInput').value.trim();
+        const output = document.getElementById('output');
 
-            try {
-                // 1. まずオブジェクトとしてパース
-                const obj = JSON.parse(input);
-                
-                // 2. 一旦、すべての空白を除去して1行の文字列にする
-                let rawJson = JSON.stringify(obj);
-
-                // 3. 正規表現で各キーの前に改行を入れる
-                // 原理：最初の "{" を除き、トップレベルの "key": の前に改行とカンマを調整
-                // 
-                // 置換ルール: 
-                // - 最初と最後の中括弧を維持しつつ、
-                // - 途中の `"key":` のパターンを見つけてその前に改行を入れる
-                
-                let formatted = rawJson
-                    .replace(/^{/, '{\n')            // 開始の中括弧の後に改行
-                    .replace(/}$/, '\n}')            // 閉じの中括弧の前に改行
-                    .replace(/,"([^"]+)":{/g, ',\n"$1": {'); // キーの開始ごとに改行
-
-                outputElement.textContent = formatted;
-            } catch (e) {
-                outputElement.textContent = "エラー: 正しいJSON形式ではありません。\n" + e.message;
-            }
+        if (!input) {
+            output.innerHTML = '<span class="error">入力が空です。</span>';
+            return;
         }
-    </script>
+
+        try {
+            // 1. JSONとして解析
+            const data = JSON.parse(input);
+            
+            // 2. 一旦、インデントなしの完全な1行にする
+            const minified = JSON.stringify(data);
+
+            // 3. 正規表現を使って、トップレベルのキーの前に改行を入れる
+            // 前提: オブジェクト形式であること
+            let result = minified
+                .replace(/^\{/, '{\n  ')                // 最初の { 
+                .replace(/\}$/, '\n}')                  // 最後の }
+                .replace(/,"([^"]+)":/g, ',\n  "$1":'); // 各キーの前に改行とスペース2つを入れる
+
+            output.textContent = result;
+            output.style.color = "#abb2bf"; // エラー後のリセット用
+        } catch (e) {
+            output.innerHTML = '<span class="error">JSONの形式が正しくありません: ' + e.message + '</span>';
+        }
+    }
+</script>
+
 </body>
 </html>
