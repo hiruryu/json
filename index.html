@@ -2,66 +2,65 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSON Line Formatter</title>
+    <title>JSON Single Line per Key</title>
     <style>
-        :root { --primary-color: #4a90e2; --bg-color: #f8f9fa; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); padding: 40px; color: #333; }
-        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-        h2 { margin-top: 0; color: #2c3e50; border-left: 5px solid var(--primary-color); padding-left: 15px; }
-        textarea { width: 100%; height: 250px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; font-family: 'Courier New', Courier, monospace; font-size: 14px; box-sizing: border-box; resize: vertical; }
-        .controls { margin: 20px 0; text-align: center; }
-        button { background-color: var(--primary-color); color: white; border: none; padding: 12px 30px; font-size: 16px; border-radius: 6px; cursor: pointer; transition: background 0.3s; }
-        button:hover { background-color: #357abd; }
-        .output-label { font-weight: bold; margin-bottom: 10px; display: block; }
-        #output { background: #282c34; color: #abb2bf; padding: 20px; border-radius: 8px; overflow-x: auto; font-family: 'Courier New', Courier, monospace; font-size: 14px; white-space: pre; min-height: 50px; }
-        .error { color: #e74c3c; background: #fdf2f2; border: 1px solid #e74c3c; padding: 10px; border-radius: 4px; }
+        body { font-family: sans-serif; padding: 20px; background: #f0f2f5; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        textarea { width: 100%; height: 200px; font-family: monospace; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        .controls { margin: 15px 0; text-align: center; }
+        button { padding: 10px 25px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #218838; }
+        pre { 
+            background: #272822; color: #f8f8f2; padding: 15px; border-radius: 4px; 
+            overflow-x: auto; white-space: pre; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px;
+            line-height: 1.5;
+        }
+        .label { font-weight: bold; display: block; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>JSON キー別1行変換</h2>
-    <p>JSONを貼り付けて「変換」を押すと、各キーごとに改行しつつ中身を1行にまとめます。</p>
+    <h2>JSON キー単位1行変換</h2>
     
-    <textarea id="jsonInput" placeholder='ここにJSONを貼り付けてください...'></textarea>
+    <span class="label">入力 (JSONを貼り付けてください):</span>
+    <textarea id="jsonInput" placeholder='{"word1": {...}, "word2": {...}}'></textarea>
 
     <div class="controls">
-        <button onclick="transformJson()">変換を実行する</button>
+        <button onclick="convert()">1行ずつに変換</button>
     </div>
 
-    <span class="output-label">出力結果:</span>
-    <pre id="output">変換後のJSONがここに表示されます</pre>
+    <span class="label">出力結果:</span>
+    <pre id="output">ここに変換結果が表示されます</pre>
 </div>
 
 <script>
-    function transformJson() {
+    function convert() {
         const input = document.getElementById('jsonInput').value.trim();
         const output = document.getElementById('output');
 
-        if (!input) {
-            output.innerHTML = '<span class="error">入力が空です。</span>';
-            return;
-        }
-
         try {
-            // 1. JSONとして解析
+            // 1. まずオブジェクトとして解析
             const data = JSON.parse(input);
             
-            // 2. 一旦、インデントなしの完全な1行にする
-            const minified = JSON.stringify(data);
+            let lines = [];
+            
+            // 2. 各キーごとにループを回して、その値(Value)だけを1行に固める
+            for (const [key, value] of Object.entries(data)) {
+                // 値の部分だけをインデントなしの1行文字列にする
+                const valStr = JSON.stringify(value);
+                // 整形して配列に追加
+                lines.push(`  "${key}": ${valStr}`);
+            }
 
-            // 3. 正規表現を使って、トップレベルのキーの前に改行を入れる
-            // 前提: オブジェクト形式であること
-            let result = minified
-                .replace(/^\{/, '{\n  ')                // 最初の { 
-                .replace(/\}$/, '\n}')                  // 最後の }
-                .replace(/,"([^"]+)":/g, ',\n  "$1":'); // 各キーの前に改行とスペース2つを入れる
+            // 3. 全体を結合して表示
+            // JSONの開始 { と 終了 } の間に、カンマで繋いだ各行を入れる
+            const finalResult = "{\n" + lines.join(",\n") + "\n}";
+            
+            output.textContent = finalResult;
 
-            output.textContent = result;
-            output.style.color = "#abb2bf"; // エラー後のリセット用
         } catch (e) {
-            output.innerHTML = '<span class="error">JSONの形式が正しくありません: ' + e.message + '</span>';
+            output.textContent = "エラー: JSONの形式が正しくありません。\n" + e.message;
         }
     }
 </script>
