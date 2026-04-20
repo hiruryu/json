@@ -7,15 +7,20 @@
         body { font-family: sans-serif; padding: 20px; background: #f0f2f5; }
         .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         textarea { width: 100%; height: 200px; font-family: monospace; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        .controls { margin: 15px 0; text-align: center; }
-        button { padding: 10px 25px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-        button:hover { background: #218838; }
+        .controls { margin: 15px 0; text-align: center; display: flex; justify-content: center; gap: 10px; }
+        button { padding: 10px 25px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; transition: background 0.2s; }
+        .btn-convert { background: #28a745; color: white; }
+        .btn-convert:hover { background: #218838; }
+        .btn-copy { background: #007bff; color: white; }
+        .btn-copy:hover { background: #0069d9; }
+        .btn-copy:disabled { background: #6c757d; cursor: not-allowed; }
         pre { 
             background: #272822; color: #f8f8f2; padding: 15px; border-radius: 4px; 
             overflow-x: auto; white-space: pre; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px;
-            line-height: 1.5;
+            line-height: 1.5; min-height: 50px;
         }
-        .label { font-weight: bold; display: block; margin-bottom: 5px; }
+        .label-group { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px; }
+        .label { font-weight: bold; }
     </style>
 </head>
 <body>
@@ -27,10 +32,13 @@
     <textarea id="jsonInput" placeholder='{"word1": {...}, "word2": {...}}'></textarea>
 
     <div class="controls">
-        <button onclick="convert()">1行ずつに変換</button>
+        <button class="btn-convert" onclick="convert()">1行ずつに変換</button>
+        <button id="copyBtn" class="btn-copy" onclick="copyToClipboard()" disabled>結果をコピー</button>
     </div>
 
-    <span class="label">出力結果:</span>
+    <div class="label-group">
+        <span class="label">出力結果:</span>
+    </div>
     <pre id="output">ここに変換結果が表示されます</pre>
 </div>
 
@@ -38,29 +46,56 @@
     function convert() {
         const input = document.getElementById('jsonInput').value.trim();
         const output = document.getElementById('output');
+        const copyBtn = document.getElementById('copyBtn');
+
+        if (!input) {
+            output.textContent = "入力を空にすることはできません。";
+            copyBtn.disabled = true;
+            return;
+        }
 
         try {
-            // 1. まずオブジェクトとして解析
             const data = JSON.parse(input);
-            
             let lines = [];
             
-            // 2. 各キーごとにループを回して、その値(Value)だけを1行に固める
             for (const [key, value] of Object.entries(data)) {
-                // 値の部分だけをインデントなしの1行文字列にする
                 const valStr = JSON.stringify(value);
-                // 整形して配列に追加
                 lines.push(`  "${key}": ${valStr}`);
             }
 
-            // 3. 全体を結合して表示
-            // JSONの開始 { と 終了 } の間に、カンマで繋いだ各行を入れる
             const finalResult = "{\n" + lines.join(",\n") + "\n}";
-            
             output.textContent = finalResult;
+            
+            // 変換成功時にコピーボタンを有効化
+            copyBtn.disabled = false;
+            copyBtn.textContent = "結果をコピー";
 
         } catch (e) {
             output.textContent = "エラー: JSONの形式が正しくありません。\n" + e.message;
+            copyBtn.disabled = true;
+        }
+    }
+
+    async function copyToClipboard() {
+        const output = document.getElementById('output');
+        const copyBtn = document.getElementById('copyBtn');
+        const textToCopy = output.textContent;
+
+        try {
+            await navigator.clipboard.writeText(textToCopy);
+            
+            // 成功フィードバック
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = "コピー完了！";
+            copyBtn.style.background = "#28a745";
+            
+            setTimeout(() => {
+                copyBtn.textContent = "結果をコピー";
+                copyBtn.style.background = "";
+            }, 2000);
+            
+        } catch (err) {
+            alert("コピーに失敗しました: " + err);
         }
     }
 </script>
