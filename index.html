@@ -56,6 +56,7 @@
 
         try {
             const data = JSON.parse(input);
+
             let lines = [];
 
             for (const [key, value] of Object.entries(data)) {
@@ -64,128 +65,195 @@
             }
 
             const finalResult = "{\n" + lines.join(",\n") + "\n}";
+
             output.textContent = finalResult;
 
             copyBtn.disabled = false;
             copyBtn.textContent = "結果をコピー";
 
         } catch (e) {
-            output.textContent = createDetailedError(input, e);
+            output.textContent = getJsonError(input, e);
             copyBtn.disabled = true;
         }
     }
 
-    function createDetailedError(input, error) {
+
+    function getJsonError(input, error) {
+
         let position = null;
 
-        // Chrome / Edge / Firefox などの
-        // "at position 123" を取得
-        const match = error.message.match(/position\s+(\d+)/i);
+        /*
+         * Chrome / Edge / Safariなど
+         *
+         * Unexpected token } in JSON at position 12345
+         *
+         * の「12345」を取得
+         */
+        const positionMatch =
+            error.message.match(/position\s+(\d+)/i);
 
-        if (match) {
-            position = Number(match[1]);
+        if (positionMatch) {
+            position = Number(positionMatch[1]);
         }
 
-        // Firefoxなどの "line 12 column 5" にも対応
+
+        /*
+         * 行番号・列番号
+         */
         let lineNumber = null;
         let columnNumber = null;
 
-        const lineMatch = error.message.match(/line\s+(\d+)/i);
-        const columnMatch = error.message.match(/column\s+(\d+)/i);
-
-        if (lineMatch) {
-            lineNumber = Number(lineMatch[1]);
-        }
-
-        if (columnMatch) {
-            columnNumber = Number(columnMatch[1]);
-        }
-
-        // positionから行・列を計算
         if (position !== null) {
-            const before = input.slice(0, position);
 
-            lineNumber = (before.match(/\n/g) || []).length + 1;
+            const beforeError = input.slice(0, position);
 
-            const lastNewLine = before.lastIndexOf("\n");
+            // 改行の数 + 1 = 行番号
+            lineNumber =
+                (beforeError.match(/\n/g) || []).length + 1;
+
+            // 最後の改行位置
+            const lastNewLine =
+                beforeError.lastIndexOf("\n");
 
             if (lastNewLine === -1) {
+                // 1行目の場合
                 columnNumber = position + 1;
             } else {
-                columnNumber = position - lastNewLine;
+                columnNumber =
+                    position - lastNewLine;
             }
         }
+
 
         let result = "";
 
         result += "JSON構文エラー\n";
-        result += "==============================\n\n";
+        result += "================================\n\n";
 
         result += "エラーメッセージ:\n";
         result += error.message + "\n\n";
 
+
         if (lineNumber !== null) {
-            result += `行: ${lineNumber}\n`;
+            result += "発生位置:\n";
+            result += `${lineNumber}行目`;
+
+            if (columnNumber !== null) {
+                result += ` ${columnNumber}列目`;
+            }
+
+            result += "\n";
+
+            if (position !== null) {
+                result += `文字位置: ${position}\n`;
+            }
         }
 
-        if (columnNumber !== null) {
-            result += `列: ${columnNumber}\n`;
-        }
 
-        if (position !== null) {
-            result += `文字位置: ${position}\n`;
-        }
-
-        // 該当行を取得
+        /*
+         * 該当行
+         */
         if (lineNumber !== null) {
+
             const lines = input.split("\n");
             const errorLine = lines[lineNumber - 1];
 
             if (errorLine !== undefined) {
+
                 result += "\n該当行:\n";
+
                 result += errorLine + "\n";
 
                 if (columnNumber !== null) {
-                    result += " ".repeat(columnNumber - 1) + "^\n";
+
+                    result +=
+                        " ".repeat(Math.max(0, columnNumber - 1))
+                        + "^\n";
                 }
             }
 
-            // 前後の行も表示
+
+            /*
+             * 前後5行を表示
+             */
             result += "\n周辺の行:\n";
 
-            const start = Math.max(0, lineNumber - 3);
-            const end = Math.min(lines.length, lineNumber + 2);
+            const start =
+                Math.max(0, lineNumber - 3);
+
+            const end =
+                Math.min(lines.length, lineNumber + 2);
+
 
             for (let i = start; i < end; i++) {
-                const marker = (i + 1 === lineNumber) ? ">>>" : "   ";
-                result += `${marker} ${String(i + 1).padStart(4)} | ${lines[i]}\n`;
+
+                const currentLine = i + 1;
+
+                if (currentLine === lineNumber) {
+
+                    result +=
+                        `>>> ${String(currentLine).padStart(4)} | `
+                        + lines[i]
+                        + "\n";
+
+                } else {
+
+                    result +=
+                        `    ${String(currentLine).padStart(4)} | `
+                        + lines[i]
+                        + "\n";
+                }
             }
         }
 
-        result += "\n==============================";
+
+        result +=
+            "\n================================";
 
         return result;
     }
 
+
     async function copyToClipboard() {
-        const output = document.getElementById('output');
-        const copyBtn = document.getElementById('copyBtn');
-        const textToCopy = output.textContent;
+
+        const output =
+            document.getElementById('output');
+
+        const copyBtn =
+            document.getElementById('copyBtn');
+
+        const textToCopy =
+            output.textContent;
+
 
         try {
+
             await navigator.clipboard.writeText(textToCopy);
 
-            const originalText = copyBtn.textContent;
-            copyBtn.textContent = "コピー完了！";
-            copyBtn.style.background = "#28a745";
+            copyBtn.textContent =
+                "コピー完了！";
+
+            copyBtn.style.background =
+                "#28a745";
+
 
             setTimeout(() => {
-                copyBtn.textContent = "結果をコピー";
-                copyBtn.style.background = "";
+
+                copyBtn.textContent =
+                    "結果をコピー";
+
+                copyBtn.style.background =
+                    "";
+
             }, 2000);
 
+
         } catch (err) {
-            alert("コピーに失敗しました: " + err);
+
+            alert(
+                "コピーに失敗しました: "
+                + err
+            );
         }
     }
 </script>
