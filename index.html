@@ -43,97 +43,479 @@
 </div>
 
 <script>
-    function convert() {
-        const input = document.getElementById('jsonInput').value.trim();
+    function getPosition(text, index) {
+        const before = text.slice(0, index);
+
+        const line = before.split('\n').length;
+        const lastNewline = before.lastIndexOf('\n');
+        const column = index - lastNewline;
+
+        const lines = text.split('\n');
+        const errorLine = lines[line - 1] || '';
+
+        return {
+            line,
+            column,
+            errorLine
+        };
+    }
+
+    function showError(text, index, message) {
         const output = document.getElementById('output');
         const copyBtn = document.getElementById('copyBtn');
 
-        if (!input) {
-            output.textContent = "入力を空にすることはできません。";
+        const pos = getPosition(text, index);
+
+        const pointer =
+            ' '.repeat(Math.max(0, pos.column - 1)) + '^';
+
+        // 前後2行を表示
+        const lines = text.split('\n');
+        const start = Math.max(0, pos.line - 3);
+        const end = Math.min(lines.length, pos.line + 2);
+
+        let context = '';
+
+        for (let i = start; i < end; i++) {
+            const lineNumber = i + 1;
+            const marker = lineNumber === pos.line ? '>' : ' ';
+
+            context +=
+                `${marker} ${String(lineNumber).padStart(5)} | ${lines[i]}\n`;
+
+            if (lineNumber === pos.line) {
+                context +=
+                    `        | ${pointer}\n`;
+            }
+        }
+
+        output.textContent =
+            `JSON構文エラー\n\n` +
+            `エラー内容: ${message}\n\n` +
+            `行: ${pos.line}\n` +
+            `列: ${pos.column}\n` +
+            `文字位置: ${index}\n\n` +
+            `周辺のコード:\n` +
+            context;
+
+        copyBtn.disabled = true;
+    }
+
+
+    // JSONを自前で解析する
+    class JSONParser {
+        constructor(text) {
+            this.text = text;
+            this.pos = 0;
+        }
+
+        error(message) {
+            throw {
+                message: message,
+                position: this.pos
+            };
+        }
+
+        current() {
+            return this.text[this.pos];
+        }
+
+        skipWhitespace() {
+            while (
+                this.current() === ' ' ||
+                this.current() === '\t' ||
+                this.current() === '\n' ||
+                this.current() === '\r'
+            ) {
+                this.pos++;
+            }
+        }
+
+        parse() {
+            this.skipWhitespace();
+
+            const value = this.parseValue();
+
+            this.skipWhitespace();
+
+            if (this.pos < this.text.length) {
+                this.error(
+                    `予期しない文字「${this.current()}」があります。`
+                );
+            }
+
+            return value;
+        }
+
+        parseValue() {
+            this.skipWhitespace();
+
+            const c = this.current();
+
+            if (c === '{') {
+                return this.parseObject();
+            }
+
+            if (c === '[') {
+                return this.parseArray();
+            }
+
+            if (c === '"') {
+                return this.parseString();
+            }
+
+            if (c === '-' || /[0-9]/.test(c)) {
+                return this.parseNumber();
+            }
+
+            if (this.text.startsWith('true', this.pos)) {
+                this.pos += 4;
+                return true;
+            }
+
+            if (this.text.startsWith('false', this.pos)) {
+                this.pos += 5;
+                return false;
+            }
+
+            if (this.text.startsWith('null', this.pos)) {
+                this.pos += 4;
+                return null;
+            }
+
+            this.error(
+                `値が必要ですが「${c || 'EOF'}」が見つかりました。`
+            );
+        }
+
+        parseObject() {
+            this.pos++; // {
+
+            const obj = {};
+
+            this.skipWhitespace();
+
+            if (this.current() === '}') {
+                this.pos++;
+                return obj;
+            }
+
+            while (true) {
+                this.skipWhitespace();
+
+                if (this.current() !== '"') {
+                    this.error(
+                        `オブジェクトのキーは「"」で始まる文字列である必要があります。`
+                    );
+                }
+
+                const key = this.parseString();
+
+                this.skipWhitespace();
+
+                if (this.current() !== ':') {
+                    this.error(
+                        `キーの後には「:」が必要です。`
+                    );
+                }
+
+                this.pos++;
+
+                this.skipWhitespace();
+
+                obj[key] = this.parseValue();
+
+                this.skipWhitespace();
+
+                if (this.current() === '}') {
+                    this.pos++;
+                    return obj;
+                }
+
+                if (this.current() !== ',') {
+                    this.error(
+                        `値の後には「,」または「}」が必要です。`
+                    );
+                }
+
+                this.pos++;
+
+                this.skipWhitespace();
+
+                // 余分なカンマ
+                if (this.current() === '}') {
+                    this.error(
+                        `余分な「,」があります。`
+                    );
+                }
+            }
+        }
+
+        parseArray() {
+            this.pos++; // [
+
+            const arr = [];
+
+            this.skipWhitespace();
+
+            if (this.current() === ']') {
+                this.pos++;
+                return arr;
+            }
+
+            while (true) {
+                this.skipWhitespace();
+
+                arr.push(this.parseValue());
+
+                this.skipWhitespace();
+
+                if (this.current() === ']') {
+                    this.pos++;
+                    return arr;
+                }
+
+                if (this.current() !== ',') {
+                    this.error(
+                        `配列の値の後には「,」または「]」が必要です。`
+                    );
+                }
+
+                this.pos++;
+
+                this.skipWhitespace();
+
+                // 余分なカンマ
+                if (this.current() === ']') {
+                    this.error(
+                        `余分な「,」があります。`
+                    );
+                }
+            }
+        }
+
+        parseString() {
+            this.pos++; // "
+
+            let result = '';
+
+            while (this.pos < this.text.length) {
+                const c = this.current();
+
+                if (c === '"') {
+                    this.pos++;
+                    return result;
+                }
+
+                if (c === '\\') {
+                    this.pos++;
+
+                    if (this.pos >= this.text.length) {
+                        this.error(
+                            `文字列のエスケープが途中で終わっています。`
+                        );
+                    }
+
+                    const e = this.current();
+
+                    const escapes = {
+                        '"': '"',
+                        '\\': '\\',
+                        '/': '/',
+                        'b': '\b',
+                        'f': '\f',
+                        'n': '\n',
+                        'r': '\r',
+                        't': '\t'
+                    };
+
+                    if (escapes[e] !== undefined) {
+                        result += escapes[e];
+                        this.pos++;
+                        continue;
+                    }
+
+                    if (e === 'u') {
+                        const hex = this.text.substr(
+                            this.pos + 1,
+                            4
+                        );
+
+                        if (!/^[0-9a-fA-F]{4}$/.test(hex)) {
+                            this.error(
+                                `Unicodeエスケープ「\\uXXXX」が正しくありません。`
+                            );
+                        }
+
+                        result += String.fromCharCode(
+                            parseInt(hex, 16)
+                        );
+
+                        this.pos += 5;
+                        continue;
+                    }
+
+                    this.error(
+                        `不正なエスケープ「\\${e}」があります。`
+                    );
+                }
+
+                // JSONでは文字列中の制御文字は禁止
+                if (c.charCodeAt(0) < 0x20) {
+                    this.error(
+                        `文字列内に不正な制御文字があります。`
+                    );
+                }
+
+                result += c;
+                this.pos++;
+            }
+
+            this.error(
+                `文字列が「"」で閉じられていません。`
+            );
+        }
+
+        parseNumber() {
+            const start = this.pos;
+
+            if (this.current() === '-') {
+                this.pos++;
+            }
+
+            if (this.current() === '0') {
+                this.pos++;
+            } else if (/[1-9]/.test(this.current())) {
+                while (/[0-9]/.test(this.current())) {
+                    this.pos++;
+                }
+            } else {
+                this.error(
+                    `不正な数値です。`
+                );
+            }
+
+            if (this.current() === '.') {
+                this.pos++;
+
+                if (!/[0-9]/.test(this.current())) {
+                    this.error(
+                        `小数点の後には数字が必要です。`
+                    );
+                }
+
+                while (/[0-9]/.test(this.current())) {
+                    this.pos++;
+                }
+            }
+
+            if (
+                this.current() === 'e' ||
+                this.current() === 'E'
+            ) {
+                this.pos++;
+
+                if (
+                    this.current() === '+' ||
+                    this.current() === '-'
+                ) {
+                    this.pos++;
+                }
+
+                if (!/[0-9]/.test(this.current())) {
+                    this.error(
+                        `指数表記の「e」の後には数字が必要です。`
+                    );
+                }
+
+                while (/[0-9]/.test(this.current())) {
+                    this.pos++;
+                }
+            }
+
+            return Number(
+                this.text.slice(start, this.pos)
+            );
+        }
+    }
+
+
+    function convert() {
+        const input =
+            document.getElementById('jsonInput').value;
+
+        const output =
+            document.getElementById('output');
+
+        const copyBtn =
+            document.getElementById('copyBtn');
+
+        const text = input.trim();
+
+        if (!text) {
+            output.textContent =
+                "入力を空にすることはできません。";
+
             copyBtn.disabled = true;
             return;
         }
 
         try {
-            const data = JSON.parse(input);
+            const parser = new JSONParser(text);
+            const data = parser.parse();
+
             let lines = [];
-            
+
             for (const [key, value] of Object.entries(data)) {
                 const valStr = JSON.stringify(value);
                 lines.push(`  "${key}": ${valStr}`);
             }
 
-            const finalResult = "{\n" + lines.join(",\n") + "\n}";
+            const finalResult =
+                "{\n" +
+                lines.join(",\n") +
+                "\n}";
+
             output.textContent = finalResult;
-            
+
             copyBtn.disabled = false;
             copyBtn.textContent = "結果をコピー";
 
         } catch (e) {
-            copyBtn.disabled = true;
-
-            // JSON.parseのエラー位置を取得
-            const match = e.message.match(/position (\d+)/i);
-
-            if (match) {
-                const position = Number(match[1]);
-
-                // エラー位置までの文字列
-                const before = input.slice(0, position);
-
-                // 行番号
-                const line = before.split('\n').length;
-
-                // 列番号
-                const lastNewline = before.lastIndexOf('\n');
-                const column = position - lastNewline;
-
-                // エラーがある行
-                const lines = input.split('\n');
-                const errorLine = lines[line - 1] || '';
-
-                // エラー箇所を指す矢印
-                const pointer = ' '.repeat(Math.max(0, column - 1)) + '^';
-
-                output.textContent =
-                    `JSON構文エラー\n\n` +
-                    `エラー内容: ${e.message}\n` +
-                    `行: ${line}\n` +
-                    `列: ${column}\n` +
-                    `文字位置: ${position}\n\n` +
-                    `該当行:\n` +
-                    `${line} | ${errorLine}\n` +
-                    `    | ${pointer}`;
-
-            } else {
-                // positionを取得できなかった場合
-                output.textContent =
-                    `JSON構文エラー\n\n` +
-                    `エラー内容: ${e.message}\n\n` +
-                    `※ ブラウザからエラー位置を取得できませんでした。`;
-            }
+            showError(
+                text,
+                e.position ?? 0,
+                e.message || "不明な構文エラー"
+            );
         }
     }
 
+
     async function copyToClipboard() {
-        const output = document.getElementById('output');
-        const copyBtn = document.getElementById('copyBtn');
-        const textToCopy = output.textContent;
+        const output =
+            document.getElementById('output');
+
+        const copyBtn =
+            document.getElementById('copyBtn');
+
+        const textToCopy =
+            output.textContent;
 
         try {
             await navigator.clipboard.writeText(textToCopy);
-            
-            const originalText = copyBtn.textContent;
+
             copyBtn.textContent = "コピー完了！";
             copyBtn.style.background = "#28a745";
-            
+
             setTimeout(() => {
                 copyBtn.textContent = "結果をコピー";
                 copyBtn.style.background = "";
             }, 2000);
-           
+
         } catch (err) {
-            alert("コピーに失敗しました: " + err);
+            alert(
+                "コピーに失敗しました: " + err
+            );
         }
     }
 </script>
